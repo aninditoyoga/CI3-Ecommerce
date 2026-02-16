@@ -1,44 +1,47 @@
 <?php
 /**
- * Patch CodeIgniter 3 for PHP 8.2–8.3 compatibility
- * Automatically adds #[AllowDynamicProperties] to system/core classes
+ * Patch tambahan untuk CodeIgniter 3 di PHP 8.3
+ * - Menambahkan #[AllowDynamicProperties] ke CI_DB_mysqli_driver
+ * - Menambahkan #[\\ReturnTypeWillChange] ke fungsi Session_files_driver
  */
 
-$systemCorePath = __DIR__ . '/system/core';
+// === PATCH 1: DB_driver.php ===
+$dbDriverPath = __DIR__ . '/system/database/DB_driver.php';
+if (file_exists($dbDriverPath)) {
+    $content = file_get_contents($dbDriverPath);
 
-if (!is_dir($systemCorePath)) {
-    exit("❌ Folder system/core tidak ditemukan!\nPastikan script ini diletakkan di root project CodeIgniter 3.\n");
-}
-
-$patched = 0;
-$files = glob($systemCorePath . '/*.php');
-
-foreach ($files as $file) {
-    $content = file_get_contents($file);
-
-    // Skip jika sudah di-patch
-    if (strpos($content, '#[AllowDynamicProperties]') !== false) {
-        continue;
-    }
-
-    // Tambahkan atribut sebelum deklarasi class utama
-    $content = preg_replace(
-        '/^(class\s+CI_[a-zA-Z0-9_]+\s+)/m',
-        "#[AllowDynamicProperties]\n\$1",
-        $content,
-        1,
-        $count
-    );
-
-    if ($count > 0) {
-        file_put_contents($file, $content);
-        echo "✅ Patched: " . basename($file) . "\n";
-        $patched++;
+    // Pastikan patch hanya untuk class CI_DB_driver (bukan interface atau lainnya)
+    if (strpos($content, 'class CI_DB_mysqli_driver') !== false && strpos($content, '#[AllowDynamicProperties]') === false) {
+        $content = preg_replace(
+            '/(class\s+CI_DB_mysqli_driver\s+)/',
+            "#[AllowDynamicProperties]\n$1",
+            $content,
+            1,
+            $count
+        );
+        if ($count > 0) {
+            file_put_contents($dbDriverPath, $content);
+            echo "✅ Patched: CI_DB_mysqli_driver (DB_driver.php)\n";
+        }
     }
 }
 
-if ($patched === 0) {
-    echo "ℹ️ Tidak ada file yang perlu di-patch atau semua sudah dipatch sebelumnya.\n";
-} else {
-    echo "\n🎉 Selesai! Total $patched file sudah di-patch agar kompatibel dengan PHP 8.3.\n";
+// === PATCH 2: Session_files_driver.php ===
+$sessionFile = __DIR__ . '/system/libraries/Session/drivers/Session_files_driver.php';
+if (file_exists($sessionFile)) {
+    $content = file_get_contents($sessionFile);
+
+    // Tambahkan #[\\ReturnTypeWillChange] ke semua method yang perlu
+    $methods = ['open', 'close', 'read', 'write', 'destroy', 'gc'];
+    foreach ($methods as $method) {
+        $pattern = '/public\s+function\s+' . $method . '\s*\(/i';
+        if (!preg_match('/#\\\\ReturnTypeWillChange\s*\n\s*public\s+function\s+' . $method . '/i', $content)) {
+            $content = preg_replace($pattern, "#[\\ReturnTypeWillChange]\n    public function $method(", $content);
+        }
+    }
+
+    file_put_contents($sessionFile, $content);
+    echo "✅ Patched: Session_files_driver.php (ReturnType compatibility)\n";
 }
+
+echo "\n🎉 Semua patch tambahan telah diterapkan. Sekarang CodeIgniter 3 aman untuk PHP 8.3.\n";
